@@ -6,6 +6,7 @@
 #include <map>
 #include <vector>
 #include "tokenscanner.hpp"
+#include "code.hpp"
 using namespace std;
 
 const int MXC = 256;
@@ -21,13 +22,14 @@ public:
 
 	void init(const char* filename) {
 		freopen(filename, "r", stdin);
-		code.clear();
+		text.clear();
 		string tmp;
 		char line[1000];
 		tmp = "";
 		data_buf = 0;
 		memset(reg, 0, sizeof(reg));
 		memset(data, 0, sizeof(data));
+		codeinit();
 		bool is_data = false;
 		Tokenscanner buf;
 		while (!cin.eof()) {
@@ -40,74 +42,76 @@ public:
 					tmp = buf.dat[0]; tmp.pop_back();
 				}
 				else {
-					switch (buf.dat[0]) {
-						case ".align":
-							int w = stoi(buf.dat[1]);
-							data_buf = ((data_buf - 1) / (1 << w) + 1) * (1 << w);
+					int typ = dat_typ[buf.dat[0]];
+					int tt, tn, i, j;
+					switch (typ) {
+						case 1:
+							tt = stoi(buf.dat[1]);
+							data_buf = ((data_buf - 1) / (1 << tt) + 1) * (1 << tt);
 							break;
-						case ".ascii":
+						case 2:
 							if (tmp != "") {
 								data_label[tmp] = data_buf;
 								tmp = "";
 							}
-							int len = buf.dat[1].length();
-							for(int i = 0; i < len; i++) data[data_buf + i] = buf.dat[1][i];
-							data_buf += len;
+							tt = buf.dat[1].length();
+							for(i = 0; i < tt; i++) data[data_buf + i] = buf.dat[1][i];
+							data_buf += tt;
 							break;
-						case "asciiz":
+						case 3:
 							if (tmp != "") {
 								data_label[tmp] = data_buf;
 								tmp = "";
 							}
-							int len = buf.dat[1].length();
-							for(int i = 0; i < len; i++) data[data_buf + i] = buf.dat[1][i];
-							data_buf += len;
+							tt = buf.dat[1].length();
+							for(i = 0; i < tt; i++) data[data_buf + i] = buf.dat[1][i];
+							data_buf += tt;
 							data[data_buf] = 0;
 							data_buf++;
 							break;
-						case ".byte":
+						case 4:
 							if (tmp != "") {
 								data_label[tmp] = data_buf;
 								tmp = "";
 							}
-							int num = buf.dat.size() - 1;
-							for (int i = 1; i <= num; i++) {
+							tt = buf.dat.size() - 1;
+							for (i = 1; i <= tt; i++) {
 								data[data_buf + i - 1] = stoi(buf.dat[i]);
 							}
-							data_buf += num;
+							data_buf += tt;
 							break;
-						case ".half":
+						case 5:
 							if (tmp != "") {
 								data_label[tmp] = data_buf;
 								tmp = "";
 							}
-							int num = buf.dat.size() - 1;
-							for (int i = 1; i <= num; i++) {
-								int tn = stoi(buf.dat[i]);
-								for (int j = 1; j >= 0; j--) {
+							tt = buf.dat.size() - 1;
+							for (i = 1; i <= tt; i++) {
+								tn = stoi(buf.dat[i]);
+								for (j = 1; j >= 0; j--) {
 									data[data_buf + (i - 1) * 2 + j] = tn % MXC;
 									tn /= MXC;
 								}
 							}
-							data_buf += num * 2;
+							data_buf += tt * 2;
 							break;
-						case ".word":
+						case 6:
 							if (tmp != "") {
 								data_label[tmp] = data_buf;
 								tmp = "";
 							}
-							int num = buf.dat.size() - 1;
-							for (int i = 1; i <= num; i++) {
-								int tn = stoi(buf.dat[i]);
-								for (int j = 3; j >= 0; j--) {
+							tt = buf.dat.size() - 1;
+							for (i = 1; i <= tt; i++) {
+								tn = stoi(buf.dat[i]);
+								for (j = 3; j >= 0; j--) {
 									data[data_buf + (i - 1) * 4 + j] = tn % MXC;
 									tn /= MXC;
 								}
 							}
-							data_buf += num * 4;
+							data_buf += tt * 4;
 							break;
-						case ".space":
-							data_buff += stoi(buf.dat[1]);
+						case 7:
+							data_buf += stoi(buf.dat[1]);
 							break;
 					}
 
@@ -115,7 +119,7 @@ public:
 			}
 			else {
 				if (tmp != "") {
-					text_label = text.size();
+					text_label[tmp] = text.size();
 					tmp = "";
 				}
 				code tcode(buf);
