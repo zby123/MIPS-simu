@@ -47,8 +47,8 @@ void codeinit(){
 	op_typ["add"] = 0; op_typ["addu"] = 1;
 	op_typ["addiu"] = 2; op_typ["sub"] = 3;
 	op_typ["subu"] = 4; op_typ["mul"] = 5;
-	op_typ["mulu"] = 6; op_typ["div"] = 9;
-	op_typ["divu"] = 10; op_typ["xor"] = 13;
+	op_typ["mulu"] = 7; op_typ["div"] = 9;
+	op_typ["divu"] = 11; op_typ["xor"] = 13;
 	op_typ["xoru"] = 14; op_typ["neg"] = 15;
 	op_typ["negu"] = 16; op_typ["rem"] = 17;
 	op_typ["remu"] = 18; op_typ["li"] = 19;
@@ -67,7 +67,8 @@ void codeinit(){
 	op_typ["lh"] = 44; op_typ["lw"] = 45;
 	op_typ["sb"] = 46; op_typ["sh"] = 47;
 	op_typ["sw"] = 48; op_typ["move"] = 49;
-	op_typ[]
+	op_typ["mfhi"] = 50; op_typ["mflo"] = 51;
+	op_typ["nop"] = 52; op_typ["syscall"] = 53;
 }
 
 class code{
@@ -84,6 +85,41 @@ public:
 		string tmp;
 		tmp = buf.dat[0];
 		opr_type = op_typ[tmp];
+		if (opr_type >= 5 && opr_type <= 11) {
+			if (buf.dat.size() == 3) opr_type ++;
+		}
+		switch (opr_type) {
+			case 0: case 1: case 3: case 4: case 5: case 7: case 9: case 11: case 13: case 14: case 17: case 18:
+				arg[0] = reg_name[buf.dat[1]];
+				arg[1] = reg_name[buf.dat[2]];
+				if (buf.dat[3][0] == '$') {
+					arg[3] = reg_name[buf.dat[3]];
+					offset = 1;
+				}
+				else {
+					arg[3] = to_string(buf.dat[3]);
+					offset = 0;
+				}
+				break;
+			case 2: 
+				arg[0] = reg_name[buf.dat[1]];
+				arg[1] = reg_name[buf.dat[2]];
+				arg[3] = to_string(buf.dat[3]);
+				offset = 0;
+				break;
+			case 6: case 8: case 10: case 12: case 15: case 16:
+				arg[0] = reg_name[buf.dat[1]];
+				if (buf.dat[2][0] == '$') {
+					arg[2] = reg_name[buf.dat[2]];
+					offset = 1;
+				}
+				else {
+					arg[2] = to_string(buf.dat[2]);
+					offset = 0;
+				}
+				break;
+
+		}
 	}
 };
 
