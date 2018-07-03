@@ -214,8 +214,13 @@ public:
 		reg[29] = 4 * 1024 * 1024 - 1;
 	}
 
-	unsigned int tou(int x) {
-		unsigned int res = x > 0 ? x : MXU - x;
+	long long tou(int x) {
+		long long res = (long long)x > 0 ? x : (long long)MXU + x;
+		return res;
+	}
+
+	char tod(unsigned char x) {
+		char res = x;
 		return res;
 	}
 
@@ -258,12 +263,12 @@ public:
 					break;
 				case 7: 
 					tmp2 = (unsigned long long)tou(reg[cur.arg[1]]) * tou(Src(2));
-					reg[cur.arg[0]] = (unsigned long)(tmp % MXU);
+					reg[cur.arg[0]] = (unsigned long)(tmp2 % MXU);
 					break;
 				case 8:
 					tmp2 = (unsigned long long)tou(reg[cur.arg[0]]) * tou(Src(1));
-					reg[32] = (unsigned long)(tmp % MXU);
-					reg[33] = (unsigned long)(tmp / MXU);
+					reg[32] = (unsigned long)(tmp2 % MXU);
+					reg[33] = (unsigned long)(tmp2 / MXU);
 					break;
 				case 9:
 					reg[cur.arg[0]] = reg[cur.arg[1]] / Src(2);
@@ -371,12 +376,12 @@ public:
 				 	else reg[cur.arg[0]] = -cur.arg[1] - 1;
 				 	break;
 				case 44:
-					if (cur.arg[1] >= 0) reg[cur.arg[0]] = data[reg[cur.arg[1]] + cur.offset];
+					if (cur.arg[1] >= 0) reg[cur.arg[0]] = tod(data[reg[cur.arg[1]] + cur.offset]);
 					else reg[cur.arg[0]] = data[-cur.arg[1] - 1];
 					break;
 				case 45:
-					if (cur.arg[1] >= 0) reg[cur.arg[0]] = data[reg[cur.arg[1]] + cur.offset] * MXC + data[reg[cur.arg[1]] + cur.offset + 1];
-					else reg[cur.arg[0]] = data[-cur.arg[1] - 1] * MXC + data[-cur.arg[1] - 1 + 1];
+					if (cur.arg[1] >= 0) reg[cur.arg[0]] = tod(data[reg[cur.arg[1]] + cur.offset]) * MXC + tod(data[reg[cur.arg[1]] + cur.offset + 1]);
+					else reg[cur.arg[0]] = tod(data[-cur.arg[1] - 1]) * MXC + tod(data[-cur.arg[1] - 1 + 1]);
 					break;
 				case 46:
 				 	tmp = 0;
@@ -389,7 +394,8 @@ public:
 					reg[cur.arg[0]] = tmp;
 					break;
 				case 47:
-					if (cur.arg[1] >= 0) data[reg[cur.arg[1]] + cur.offset] = reg[cur.arg[0]];
+					tmp = reg[cur.arg[0]];
+					if (cur.arg[1] >= 0) data[reg[cur.arg[1]] + cur.offset] = tmp % MXC;
 					else data[-cur.arg[1] - 1] = reg[cur.arg[0]];
 					break;
 				case 48:
@@ -398,7 +404,7 @@ public:
 					else for (i = 1; i>=0; i--) data[-cur.arg[1] - 1 + i] = tmp % MXC, tmp /= MXC;
 					break;
 				case 49:
-					tmp = reg[cur.arg[0]];
+					tmp = tou(reg[cur.arg[0]]);
 					if (cur.arg[1] >= 0) for (i = 3; i>=0; i--) data[reg[cur.arg[1]] + cur.offset + i] = tmp % MXC, tmp /= MXC;
 					else for (i = 3; i>=0; i--) data[-cur.arg[1] - 1 + i] = tmp % MXC, tmp /= MXC;
 					break;
@@ -425,7 +431,7 @@ public:
 							}
 							break;
 						case 5:
-							cin >> reg[2];
+							cin >> reg[4];
 							break;
 						case 8:
 							cin.getline(stmp, reg[5] - 1);
