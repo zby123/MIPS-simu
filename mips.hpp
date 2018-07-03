@@ -26,9 +26,8 @@ class mips {
 
 public:
 
-	string pro_trans(string &x) {
+	string pro_trans(string x) {
 		string res = x;
-		res.erase(0, 1); res.pop_back();
 		int i = 0, len = res.length();
 		while (i < len) {
 			if (res[i] == '\\') {
@@ -77,6 +76,7 @@ public:
 		codeinit();
 		bool is_data = false;
 		Tokenscanner buf;
+		int i, j;
 		while (!inf.eof()) {
 			inf.getline(line, 999);
 			buf.process(line);
@@ -106,7 +106,15 @@ public:
 								data_label[tmp] = data_buf;
 								n_label.pop_back();
 							}
-							tmp2 = pro_trans(buf.dat[1]);
+							tmp2 = "";
+							i = 0;
+							while (line[i] != '\"') i++;
+							i++;
+							while (line[i] != '\"') {
+								tmp2 += line[i];
+								i++;
+							}
+							tmp2 = pro_trans(tmp2);
 							tt = tmp2.length();
 							for(i = 0; i < tt; i++) data[data_buf + i] = tmp2[i];
 							data_buf += tt;
@@ -117,7 +125,15 @@ public:
 								data_label[tmp] = data_buf;
 								n_label.pop_back();
 							}
-							tmp2 = pro_trans(buf.dat[1]);
+							tmp2 = "";
+							i = 0;
+							while (line[i] != '\"') i++;
+							i++;
+							while (line[i] != '\"') {
+								tmp2 += line[i];
+								i++;
+							}
+							tmp2 = pro_trans(tmp2);
 							tt = tmp2.length();
 							for(i = 0; i < tt; i++) data[data_buf + i] = tmp2[i];
 							data_buf += tt;
