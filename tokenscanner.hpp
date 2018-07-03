@@ -15,10 +15,10 @@ public:
 		string tmp; tmp = "";
 		int i = 0;
 		while (i < len) {
-			while ((st[i] == ' ' || st[i] == '\t' || st[i] == '\0' || st[i] == ',') && i < len) i++;
+			while ((st[i] == ' ' || st[i] == '\t' || st[i] == '\0' || st[i] == ',' || st[i] == '(' || st[i] == ')') && i < len) i++;
 			if (i >= len) break;
-			while ((st[i] != ' ' && st[i] != '\t' && st[i] != ',') && i < len) tmp += st[i];
-			dat.push_back(tmp);
+			while ((st[i] != ' ' && st[i] != '\t' && st[i] != ',' && st[i] != '(' && st[i] != ')') && i < len) tmp += st[i], i++;
+			if (tmp != "") dat.push_back(tmp);
 			tmp = "";
 		}
 	}
