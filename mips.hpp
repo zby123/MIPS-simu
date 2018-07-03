@@ -65,8 +65,7 @@ public:
 		return res;
 	}
 
-	void init(const char* filename) {
-		ifstream inf(filename);
+	void init() {
 		text.clear();
 		string tmp, tmp2;
 		char line[1000];
@@ -77,8 +76,8 @@ public:
 		codeinit();
 		bool is_data = false;
 		Tokenscanner buf;
-		while (!inf.eof()) {
-			inf.getline(line, 999);
+		while (!cin.eof()) {
+			cin.getline(line, 999);
 			buf.process(line);
 			if (buf.dat.size() == 0) continue;
 			if (buf.dat[0] == ".data") is_data = true;

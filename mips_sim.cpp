@@ -7,7 +7,7 @@ char st[100];
 
 int main(){
 	mips mip;
-	mip.init("a.s");
+	mip.init();
 	mip.run();
 	return 0;
 }
