@@ -152,6 +152,7 @@ public:
 						arg[1] = reg_name[buf.dat[2]];
 					}
 					else label = buf.dat[2];
+					offset = 0;
 				}
 				break;
 		}
