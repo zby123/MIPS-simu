@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <fstream>
 #include <string>
+#include <map>
 #include "mips.hpp"
 #include "code.hpp"
 #include "cpu.hpp"
@@ -34,9 +35,10 @@ class pipeline {
 	}MEM_WB;
 
 	CPU *cpu;
-	int pc;
+	int pc, ppc;
 	bool c_stall;
-	int fin;
+	int fin, suc, fail;
+	map<int, int> predictor;
 
 public:
 
@@ -47,16 +49,15 @@ public:
 		ID_EX.ctrl = EX_MEM.ctrl = MEM_WB.ctrl = -1;
 		IF_ID.inst.opr_type = -1;
 		fin = 0;
+		ppc = 0;
+		fail = suc = 0;
+		predictor.clear();
 	}
 
 	void IF() {
 		if (fin) return;
 		if (cpu->r_stall) {
 			cpu->r_stall = 0;
-			return;
-		}
-		if (c_stall) {
-			IF_ID.inst.opr_type = -1;
 			return;
 		}
 		IF_ID.inst = cpu->fetch_ins(pc);
@@ -101,7 +102,7 @@ public:
 			case 19: 
 			case 27: case 28: case 29: case 30: case 31: case 32:
 			case 33: case 34: case 35: case 36: case 37: case 38:
-			case 40: case 42: case 47: case 48: case 49:
+			case 47: case 48: case 49:
 				ID_EX.A = cpu->get_reg(tmp.arg[0]);
 				break;
 			case 51:
@@ -185,9 +186,20 @@ public:
 			if (tmp.arg[1] < 0) ID_EX.imm = - tmp.arg[1] - 1;
 			else ID_EX.imm = tmp.offset;
 		}
+		if (tmp.opr_type == 40 || tmp.opr_type == 42) {
+			ID_EX.imm = cpu->get_reg(tmp.arg[0]);
+		}
 		if (tmp.opr_type == 19) ID_EX.imm = tmp.arg[1];
-
-		if (tmp.opr_type >= 26 && tmp.opr_type <= 42) c_stall = 1;
+		if (tmp.opr_type == 26 || (tmp.opr_type >= 39 && tmp.opr_type <= 42)) {
+			pc = ID_EX.imm;
+		}
+		if (tmp.opr_type >= 27 && tmp.opr_type <= 38) {
+			if (predictor.count(IF_ID.npc - 1) == 0) predictor[IF_ID.npc - 1] = 1;
+			if (predictor[IF_ID.npc - 1] > 1) {
+				ppc = pc = ID_EX.imm;
+			}
+			else ppc = pc = IF_ID.npc;
+		}
 	}
 
 	void EX() {
@@ -267,57 +279,130 @@ public:
 			case 25:
 				EX_MEM.res = (A != B);
 				break;
-			case 26:
-				pc = imm;
-				break;
 			case 27:
-				if (A == B) pc = imm;
+				if (A == B) {
+					pc = imm;
+					if (predictor[npc - 1] != 3) predictor[npc - 1]++;
+				}
+				else {
+					pc = npc;
+					if (predictor[npc - 1] != 0) predictor[npc - 1]--;
+				}
 				break;
 			case 28:
-				if (A != B) pc = imm;
+				if (A != B) {
+					pc = imm;
+					if (predictor[npc - 1] != 3) predictor[npc - 1]++;
+				}
+				else {
+					pc = npc;
+					if (predictor[npc - 1] != 0) predictor[npc - 1]--;
+				}
 				break;
 			case 29:
-				if (A >= B) pc = imm;
+				if (A >= B) {
+					pc = imm;
+					if (predictor[npc - 1] != 3) predictor[npc - 1]++;
+				}
+				else {
+					pc = npc;
+					if (predictor[npc - 1] != 0) predictor[npc - 1]--;
+				}
 				break;
 			case 30:
-				if (A <= B) pc = imm;
+				if (A <= B) {
+					pc = imm;
+					if (predictor[npc - 1] != 3) predictor[npc - 1]++;
+				}
+				else {
+					pc = npc;
+					if (predictor[npc - 1] != 0) predictor[npc - 1]--;
+				}
 				break;
 			case 31:
-				if (A > B) pc = imm;
+				if (A > B) {
+					pc = imm;
+					if (predictor[npc - 1] != 3) predictor[npc - 1]++;
+				}
+				else {
+					pc = npc;
+					if (predictor[npc - 1] != 0) predictor[npc - 1]--;
+				}
 				break;
 			case 32:
-				if (A < B) pc = imm;
+				if (A < B) {
+					pc = imm;
+					if (predictor[npc - 1] != 3) predictor[npc - 1]++;
+				}
+				else {
+					pc = npc;
+					if (predictor[npc - 1] != 0) predictor[npc - 1]--;
+				}
 				break;
 			case 33:
-				if (A == 0) pc = imm;
+				if (A == 0) {
+					pc = imm;
+					if (predictor[npc - 1] != 3) predictor[npc - 1]++;
+				}
+				else {
+					pc = npc;
+					if (predictor[npc - 1] != 0) predictor[npc - 1]--;
+				}
 				break;
 			case 34:
-				if (A != 0) pc = imm;
+				if (A != 0) {
+					pc = imm;
+					if (predictor[npc - 1] != 3) predictor[npc - 1]++;
+				}
+				else {
+					pc = npc;
+					if (predictor[npc - 1] != 0) predictor[npc - 1]--;
+				}
 				break;
 			case 35:
-				if (A <= 0) pc = imm;
+				if (A <= 0) {
+					pc = imm;
+					if (predictor[npc - 1] != 3) predictor[npc - 1]++;
+				}
+				else {
+					pc = npc;
+					if (predictor[npc - 1] != 0) predictor[npc - 1]--;
+				}
 				break;
 			case 36:
-				if (A >= 0) pc = imm;
+				if (A >= 0) {
+					pc = imm;
+					if (predictor[npc - 1] != 3) predictor[npc - 1]++;
+				}
+				else {
+					pc = npc;
+					if (predictor[npc - 1] != 0) predictor[npc - 1]--;
+				}
 				break;
 			case 37:
-				if (A > 0) pc = imm;
+				if (A > 0) {
+					pc = imm;
+					if (predictor[npc - 1] != 3) predictor[npc - 1]++;
+				}
+				else {
+					pc = npc;
+					if (predictor[npc - 1] != 0) predictor[npc - 1]--;
+				}
 				break;
 			case 38:
-				if (A < 0) pc = imm;
-				break;
-			case 39:
-				pc = imm;
-				break;
-			case 40:
-				pc = A;
+				if (A < 0) {
+					pc = imm;
+					if (predictor[npc - 1] != 3) predictor[npc - 1]++;
+				}
+				else {
+					pc = npc;
+					if (predictor[npc - 1] != 0) predictor[npc - 1]--;
+				}
 				break;
 			case 41:
-				pc = imm;
 				EX_MEM.res = npc;
 				break;
 			case 42:
-				pc = A;
 				EX_MEM.res = npc;
 				break;
 			case 43: case 44: case 45: case 46:
@@ -341,7 +426,16 @@ public:
 		if (op >= 50 && op <= 52) EX_MEM.dest = rd;
 		if (op == 59 || op == 63) EX_MEM.dest = 2;
 		if (op == 62) EX_MEM.dest = B;
-		c_stall = 0;
+		if (op >= 27 && op <= 38) {
+			if (pc != ppc) {
+				IF_ID.inst.opr_type = -1;
+				fail++;
+			}
+			else {
+				pc++;
+				suc++;
+			}
+		}
 	}
 
 	void MEM() {
@@ -447,6 +541,7 @@ public:
 			ID();
 			IF();
 		}
+		//printf("%d %d %.4lf\n", suc, fail, (double)1.0 * suc / (suc + fail));
 	}
 
 };
