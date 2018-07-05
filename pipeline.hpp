@@ -25,12 +25,12 @@ class pipeline {
 	struct _EX_MEM{
 		int ctrl, dest;
 		long long res;
-		char tstr[1000];
 	}EX_MEM;
 
 	struct _MEM_WB{
 		int ctrl, mdata, dest;
 		long long res;
+		char tstr[1000];
 	}MEM_WB;
 
 	CPU *cpu;
@@ -324,30 +324,9 @@ public:
 			case 47: case 48: case 49:
 				EX_MEM.res = B + imm;
 				break;
-			case 50: case 51: case 52:
+			case 50: case 51: case 52: case 55:
+			case 58: case 62: case 63:
 				EX_MEM.res = A;
-				break;
-			case 55:
-				cout << A;
-				break;
-			case 58:
-				EX_MEM.res = A;
-				break;
-			case 59:
-				cin >> EX_MEM.res;
-				break;
-			case 62:
-				EX_MEM.res = A;
-				cin.getline(EX_MEM.tstr, B - 1);
-				len = strlen(EX_MEM.tstr);
-				if (len == 0) {
-					cin.getline(EX_MEM.tstr, B - 1);
-					len = strlen(EX_MEM.tstr);
-				}
-				break;
-			case 63:
-				EX_MEM.res = cpu->data_p();
-				cpu->sys_malloc(A);
 				break;
 			case 64: case 71:
 				fin = 3;
@@ -361,6 +340,7 @@ public:
 		if (op >= 47 && op <= 49) EX_MEM.dest = A;
 		if (op >= 50 && op <= 52) EX_MEM.dest = rd;
 		if (op == 59 || op == 63) EX_MEM.dest = 2;
+		if (op == 62) EX_MEM.dest = B;
 		c_stall = 0;
 	}
 
@@ -379,10 +359,10 @@ public:
 		}
 		//printf("MEM : %d\n", ctrl);
 		int mdata = 0;
-		string tmp = "";
-		if (ctrl == 62) tmp = EX_MEM.tstr;
-		int i, j;
+		int i, j, len;
 		char tt;
+		char tstr[1000];
+		string tmp = "";
 		switch (ctrl) {
 			case 44:
 				mdata = cpu->lb(res);
@@ -402,14 +382,30 @@ public:
 			case 49:
 				cpu->sw(dest, res);
 				break;
+			case 55:
+				cout << res;
+				break;
 			case 58:
 				i = res;
 				for(tt = cpu->lb(i);tt != '\0'; i++, tt = cpu->lb(i)) tmp += tt;
 				cout << tmp;
 				break;
+			case 59:
+				cin >> res;
+				break;
 			case 62:
-				j = tmp.length();
-				for(i = 0; i < j; i++) cpu->sb(tmp[i], res + i);
+				cin.getline(tstr, dest - 1);
+				len = strlen(tstr);
+				if (len == 0) {
+					cin.getline(tstr, dest - 1);
+					len = strlen(tstr);
+				}
+				for(i = 0; i < len; i++) cpu->sb(tstr[i], res + i);
+				break;
+			case 63:
+				i = cpu->data_p();
+				cpu->sys_malloc(res);
+				res = i;
 				break;
 		}
 		MEM_WB.mdata = mdata;
