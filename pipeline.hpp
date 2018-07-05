@@ -51,8 +51,12 @@ public:
 
 	void IF() {
 		if (fin) return;
-		if (cpu->r_stall ||c_stall) {
+		if (cpu->r_stall) {
 			cpu->r_stall = 0;
+			return;
+		}
+		if (c_stall) {
+			IF_ID.inst.opr_type = -1;
 			return;
 		}
 		IF_ID.inst = cpu->fetch_ins(pc);
@@ -60,8 +64,9 @@ public:
 			fin = 1;
 			return;
 		}
-		IF_ID.npc = pc + 4;
-		pc += 4;
+		//printf("IF : %d %d \n", pc, IF_ID.inst.opr_type);
+		IF_ID.npc = pc + 1;
+		pc += 1;
 	}
 
 	void ID() {
@@ -70,6 +75,7 @@ public:
 			else return;
 		}
 		if (c_stall) {
+			ID_EX.ctrl = -1;
 			return;
 		}
 		code tmp = IF_ID.inst;
@@ -81,6 +87,7 @@ public:
 			v0 = cpu->get_reg(2);
 			ID_EX.ctrl += v0;
 		}
+		//printf("ID : %d\n", tmp.opr_type);
 		// A:
 		switch (tmp.opr_type) {
 			case 0: case 1: case 2: case 3: case 4: case 5:
@@ -98,10 +105,11 @@ public:
 				ID_EX.A = cpu->get_reg(tmp.arg[0]);
 				break;
 			case 51:
-				ID_EX.A = cpu->get_reg(32);
+				ID_EX.A = cpu->get_reg(33);
 				break;
 			case 52:
-				ID_EX.A = cpu->get_reg(33);
+				ID_EX.A = cpu->get_reg(32);
+				break;
 			case 54:
 				switch (v0) {
 					case 1: case 4: case 8: case 9:
@@ -134,6 +142,7 @@ public:
 			case 54:
 				if (v0 == 8) ID_EX.B = cpu->get_reg(5);
 				else ID_EX.B = 0;
+				break;
 			default:
 				ID_EX.B = 0;
 		}
@@ -164,6 +173,9 @@ public:
 		if (tmp.opr_type == 6 || tmp.opr_type == 8 || tmp.opr_type == 10 || tmp.opr_type == 12) {
 			cpu->lock_reg(32); cpu->lock_reg(33);
 		}
+		if (tmp.opr_type == 41 || tmp.opr_type == 42) {
+			cpu->lock_reg(31);
+		}
 
 		// imm:
 		if ((tmp.opr_type >= 26 && tmp.opr_type <= 39) || (tmp.opr_type == 41)) {
@@ -184,12 +196,17 @@ public:
 			else return;
 		}
 		int op = ID_EX.ctrl;
-		if (op == -1) return;
-		int A, B, imm, rd, npc;
+		if (op == -1) {
+			EX_MEM.ctrl = -1;
+			return;
+		}
+		int A, B, imm, rd, npc, len;
 		A = ID_EX.A; B = ID_EX.B;
 		imm = ID_EX.imm; rd = ID_EX.rd;
 		npc = ID_EX.npc;
 		EX_MEM.ctrl = op;
+
+		//printf("EX : %d\n", op);
 		// res:
 		switch (op) {
 			case 0:	case 1: case 2:
@@ -321,8 +338,12 @@ public:
 				break;
 			case 62:
 				EX_MEM.res = A;
-				cin.getline(EX_MEM.tstr, B);
-				if (strlen(EX_MEM.tstr) == 0) cin.getline(EX_MEM.tstr, B);
+				cin.getline(EX_MEM.tstr, B - 1);
+				len = strlen(EX_MEM.tstr);
+				if (len == 0) {
+					cin.getline(EX_MEM.tstr, B - 1);
+					len = strlen(EX_MEM.tstr);
+				}
 				break;
 			case 63:
 				EX_MEM.res = cpu->data_p();
@@ -352,7 +373,11 @@ public:
 		long long res;
 		ctrl = EX_MEM.ctrl;
 		dest = EX_MEM.dest; res = EX_MEM.res;
-		if (ctrl == -1) return;
+		if (ctrl == -1) {
+			MEM_WB.ctrl = -1;
+			return;
+		}
+		//printf("MEM : %d\n", ctrl);
 		int mdata = 0;
 		string tmp = "";
 		if (ctrl == 62) tmp = EX_MEM.tstr;
@@ -405,12 +430,16 @@ public:
 		mdata = MEM_WB.mdata;
 		res = MEM_WB.res;
 		if (ctrl == -1) return;
+		//printf("WB : %d\n", ctrl);
 		if (ctrl == 6 || ctrl == 8 || ctrl == 10 || ctrl == 12) {
 			cpu->write_reg(32, res & ((1LL << 32) - 1));
 			cpu->write_reg(33, res >> 32);
 		}
-		else if ((ctrl >= 0 && ctrl <= 25) || (ctrl >= 41 && ctrl <= 46) || (ctrl >= 50 && ctrl <= 52) || ctrl == 59 || ctrl == 63) {
+		else if ((ctrl >= 0 && ctrl <= 25) || (ctrl >= 41 && ctrl <= 43) || (ctrl >= 50 && ctrl <= 52) || ctrl == 59 || ctrl == 63) {
 			cpu->write_reg(dest, res);
+		}
+		else if (ctrl >= 44 && ctrl <= 46) {
+			cpu->write_reg(dest, mdata);
 		}
 	}
 

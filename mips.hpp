@@ -99,15 +99,15 @@ public:
 							for (i = 1; i <= tt; i++) {
 								if (typ == 4) {
 									cpu.sb(stoi(buf.dat[i]), tn);
-									tn++;
+									cpu.sys_malloc(1);
 								}
 								else if (typ == 5) {
 									cpu.sh(stoi(buf.dat[i]), tn);
-									tn += 2;
+									cpu.sys_malloc(2);
 								}
 								else {
 									cpu.sw(stoi(buf.dat[i]), tn);
-									tn += 4;
+									cpu.sys_malloc(4);
 								}
 							}
 							break;
@@ -126,7 +126,7 @@ public:
 				}
 				code tcode(buf);
 				cpu.add_text(tcode);
-				//cout << text.size() - 1 << "\t" << line << endl;
+				//cout << cpu.text_p() - 1 << "\t" << line << endl;
 			}
 		}
 		for (int i = 0; i < cpu.text_p(); i++) {

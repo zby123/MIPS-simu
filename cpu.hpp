@@ -34,7 +34,7 @@ public:
 	}
 
 	int data_p(){return data_buf;}
-
+	
 	int text_p(){return text.size();}
 
 	code fetch_ins(int pc) {
@@ -65,7 +65,7 @@ public:
 
 	void sb(int x, int adr) {
 		long long tmp = tou(x);
-		for (int i = 0; i >= 0; i++) {
+		for (int i = 0; i >= 0; i--) {
 			data[adr + i] = tmp % MXC;
 			tmp /= MXC;
 		}
@@ -73,7 +73,7 @@ public:
 
 	void sh(int x, int adr) {
 		long long tmp = tou(x);
-		for (int i = 1; i >= 0; i++) {
+		for (int i = 1; i >= 0; i--) {
 			data[adr + i] = tmp % MXC;
 			tmp /= MXC;
 		}
@@ -81,7 +81,7 @@ public:
 
 	void sw(int x, int adr) {
 		long long tmp = tou(x);
-		for (int i = 3; i >= 0; i++) {
+		for (int i = 3; i >= 0; i--) {
 			data[adr + i] = tmp % MXC;
 			tmp /= MXC;
 		}
