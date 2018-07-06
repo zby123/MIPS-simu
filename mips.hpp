@@ -9,21 +9,19 @@
 #include <vector>
 #include "tokenscanner.hpp"
 #include "code.hpp"
-#include "pipeline.hpp"
 #include "cpu.hpp"
 #define Src(i) (cur.offset?reg[cur.arg[i]]:cur.arg[i])
 using namespace std;
 
-class mips {
 
+
+
+class mips {
+public:
 	map<string, int> data_label;
 	map<string, int> text_label;
 	vector<string> n_label;
-	pipeline pip;
 	CPU cpu;
-
-public:
-
 	void init(const char* filename) {
 		ifstream inf(filename);
 		string tmp, tmp2;
@@ -142,11 +140,10 @@ public:
 				}
 			}
 		}
-		pip.init(cpu, text_label["main"]);
 	}
 
 	int run() {
-		pip.run();
+		//pip.run();
 		return 0;
 	}
 

@@ -38,6 +38,10 @@ public:
 	int text_p(){return text.size();}
 
 	code fetch_ins(int pc) {
+		if (pc > text.size()) {
+			code res;
+			res.opr_type = -1;
+		}
 		return text[pc];
 	}
 
@@ -60,7 +64,11 @@ public:
 	}
 
 	void lock_reg(int pos) {
-		reg_lock[pos] ++;
+		reg_lock[pos]++;
+	}
+
+	void unlock_reg(int pos) {
+		reg_lock[pos]--;
 	}
 
 	void sb(int x, int adr) {
@@ -103,28 +111,6 @@ public:
 		int tmp = 0;
 		for (int i = 0; i < 4; i++) tmp = tmp * MXC + data[adr + i];
 		return tmp;
-	}
-
-	void mul(int x, int y) {
-		long long tmp = x * y;
-		reg[32] = tmp & ((1LL << 32) - 1);
-		reg[33] = tmp >> 32;
-	}
-
-	void mulu(int x, int y) {
-		long long tmp = tou(x) * tou(y);
-		reg[32] = tmp & ((1LL << 32) - 1);
-		reg[33] = tmp >> 32;
-	}
-
-	void div(int x, int y) {
-		reg[32] = x / y;
-		reg[33] = x % y;
-	}
-
-	void divu(int x, int y) {
-		reg[32] = tou(x) / tou(y);
-		reg[33] = tou(x) % tou(y);
 	}
 
 	int sys_malloc(int x) {
