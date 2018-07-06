@@ -5,6 +5,9 @@
 #include <fstream>
 #include <string>
 #include <map>
+#include <mutex>
+#include <condition_variable>
+#include <thread>
 #include "mips.hpp"
 #include "code.hpp"
 #include "cpu.hpp"
@@ -17,21 +20,36 @@ class pipeline {
 	struct _IF_ID{
 		code inst;
 		int npc;
+		mutex mtx;
+		condition_variable fetched;
+		condition_variable wrote;
+		bool ft, wr;
 	}IF_ID;
 
 	struct _ID_EX{
 		int ctrl, imm, A, B, npc, rd, rt;
+		mutex mtx;
+		condition_variable fetched;
+		condition_variable wrote;
+		bool ft, wr;
 	}ID_EX;
 
 	struct _EX_MEM{
 		int ctrl, dest;
 		long long res;
+		mutex mtx;
+		condition_variable fetched;
+		condition_variable wrote;
+		bool ft, wr;
 	}EX_MEM;
 
 	struct _MEM_WB{
 		int ctrl, mdata, dest;
 		long long res;
-		char tstr[1000];
+		mutex mtx;
+		condition_variable fetched;
+		condition_variable wrote;
+		bool ft, wr;
 	}MEM_WB;
 
 	struct TLA_pre {
@@ -577,7 +595,7 @@ public:
 			ID();
 			IF();
 		}
-		printf("%d %d %.4lf\n", suc, fail, (double)1.0 * suc / (suc + fail));
+		//fprintf(stderr, "%d %d %.4lf\n", suc, fail, (double)1.0 * suc / (suc + fail));
 	}
 
 };
