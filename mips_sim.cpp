@@ -21,10 +21,11 @@ struct TLA_pre {
 };
 
 int pc, ppc, prd;
-bool c_stall, r_stall;
+bool r_stall;
 map<int, int> b_history;
 map<int, TLA_pre> predictor;
 int fin, suc, fail;
+mutex f_mtx;
 
 struct _IF_ID{
 	code inst;
@@ -63,56 +64,73 @@ CPU *tcpu;
 void init(CPU &tcp, int tpc) {
 	tcpu = &tcp;
 	pc = tpc;
-	c_stall = 0;
 	ID_EX.ctrl = EX_MEM.ctrl = MEM_WB.ctrl = -1;
 	IF_ID.inst.opr_type = -1;
 	fin = 0;
 	ppc = 0;
 	fail = suc = 0;
 	predictor.clear();
+	IF_ID.fr = ID_EX.fr = EX_MEM.fr = MEM_WB.fr = 0;
 }
 
 void *IF(void *ptr) {
-	if (fin) return 0;
-	if (r_stall) {
-		return 0;
+	if (pc == -1) {
+		//puts("wait IF 1");
+		unique_lock<mutex> lock(IF_ID.mtx);
+		if (IF_ID.fr) IF_ID.fetched.wait(lock);
+		IF_ID.fr = 1;
+		IF_ID.inst.opr_type = -2;
+		IF_ID.wrote.notify_all();
+		return NULL;
 	}
+	if (r_stall) {
+		unique_lock<mutex> lock(IF_ID.mtx);
+		if (IF_ID.fr) {
+			//puts("wait IF 2");
+			IF_ID.fetched.wait(lock);
+			//puts("wait end");
+		}
+		IF_ID.fr = 1;
+		IF_ID.wrote.notify_all();
+		return NULL;
+	}
+	//puts("wait IF 3");
 	unique_lock<mutex> lock(IF_ID.mtx);
 	if (IF_ID.fr) IF_ID.fetched.wait(lock);
 	IF_ID.inst = tcpu->fetch_ins(pc);
-	printf("IF : %d %d \n", pc, IF_ID.inst.opr_type);
+	//printf("IF : %d %d \n", pc, IF_ID.inst.opr_type);
 	IF_ID.npc = pc + 1;
 	pc += 1;
 	IF_ID.fr = 1;
 	if (IF_ID.inst.opr_type == -1) fin = 1;
 	IF_ID.wrote.notify_all();
-	return 0;
+	return NULL;
 }
 
 void *ID(void *ptr) {
-	tcpu->r_stall = 0;
-	if (fin) {
-		if (fin == 1) fin++;
-		else return 0;
-	}
-	if (c_stall) {
+	if (tcpu->r_stall) tcpu->r_stall = 0;
+	int A, B, npc, ctrl, rd, imm;
+	IF_ID.mtx.lock();
+	code tmp = IF_ID.inst;
+	ctrl = tmp.opr_type;
+	npc = IF_ID.npc;
+	IF_ID.fr = 0;
+	//printf("fr : 0\n");
+	IF_ID.mtx.unlock();
+	IF_ID.fetched.notify_all();
+	if (tmp.opr_type == -1) {
 		unique_lock<mutex> lock(ID_EX.mtx);
+		//puts("wait ID 2");
 		if (ID_EX.fr) ID_EX.fetched.wait(lock);
 		ID_EX.ctrl = -1;
 		ID_EX.fr = 1;
 		return 0;
 	}
-	int A, B, npc, ctrl, rd, imm;
-	IF_ID.mtx.lock();
-	code tmp = IF_ID.inst;
-	npc = IF_ID.npc;
-	IF_ID.fr = 0;
-	IF_ID.mtx.unlock();
-	IF_ID.fetched.notify_all();
-	if (tmp.opr_type == -1) {
+	if (tmp.opr_type == -2) {
 		unique_lock<mutex> lock(ID_EX.mtx);
+		//puts("wait ID 3");
 		if (ID_EX.fr) ID_EX.fetched.wait(lock);
-		ID_EX.ctrl = -1;
+		ID_EX.ctrl = -2;
 		ID_EX.fr = 1;
 		return 0;
 	}
@@ -121,7 +139,7 @@ void *ID(void *ptr) {
 		v0 = tcpu->get_reg(2);
 		ctrl += v0;
 	}
-	//printf("ID : %d\n", tmp.opr_type);
+	//printf("%d %d %d\nID : %d\n", tmp.arg[0], tmp.arg[1], tmp.arg[2], tmp.opr_type);
 	// A:
 	switch (tmp.opr_type) {
 		case 0: case 1: case 2: case 3: case 4: case 5:
@@ -132,7 +150,6 @@ void *ID(void *ptr) {
 			A = tcpu->get_reg(tmp.arg[1]);
 			break;
 		case 6: case 8: case 10: case 12: case 15: case 16:
-		case 19: 
 		case 27: case 28: case 29: case 30: case 31: case 32:
 		case 33: case 34: case 35: case 36: case 37: case 38:
 		case 47: case 48: case 49:
@@ -183,12 +200,19 @@ void *ID(void *ptr) {
 
 	if (tcpu->r_stall) {
 		unique_lock<mutex> lock2(IF_ID.mtx);
-		if (!IF_ID.fr) IF_ID.wrote.wait(lock2);
+		if (!IF_ID.fr) {
+			//puts("wait ID 4");
+			IF_ID.wrote.wait(lock2);
+			//puts("wait end");
+		}
 		IF_ID.inst = tmp; IF_ID.npc = npc;
+		IF_ID.fr = 1;
 		unique_lock<mutex> lock(ID_EX.mtx);
+		//puts("wait ID 5");
 		if (ID_EX.fr) ID_EX.fetched.wait(lock);
 		ID_EX.ctrl = -1;
 		ID_EX.fr = 1;
+		r_stall = 1;
 		return 0;
 	}
 
@@ -230,40 +254,62 @@ void *ID(void *ptr) {
 	}
 	if (tmp.opr_type == 19) imm = tmp.arg[1];
 
-	unique_lock<mutex> c_lock(IF_ID.mtx);
-	if (!IF_ID.fr) IF_ID.wrote.wait(c_lock);
-	IF_ID.inst.opr_type = -1;
-	if (tmp.opr_type == 26 || (tmp.opr_type >= 39 && tmp.opr_type <= 42)) {
-		pc = imm;
+
+	if ((tmp.opr_type >= 26 && tmp.opr_type <= 42)|| ctrl == 64 || ctrl == 71) {
+		unique_lock<mutex> c_lock(IF_ID.mtx);
+		//puts("wait ID 6");
+		if (!IF_ID.fr) IF_ID.wrote.wait(c_lock);
+		IF_ID.inst.opr_type = -1;
+		IF_ID.fr = 1;
+		if (tmp.opr_type == 26 || (tmp.opr_type >= 39 && tmp.opr_type <= 42)) {
+			pc = imm;
+		}
+		if (tmp.opr_type >= 27 && tmp.opr_type <= 38) {
+			if (predictor.count(IF_ID.npc - 1) == 0) {
+				TLA_pre tmp;
+				predictor[IF_ID.npc - 1] = tmp;
+				b_history[IF_ID.npc - 1] = 0;
+			}
+			if (predictor[IF_ID.npc - 1].prediction[b_history[IF_ID.npc - 1]] > 1) {
+				ppc = pc = imm;
+			}
+			else ppc = pc = npc;
+			prd = rd;
+		}
+		if (r_stall) {
+			r_stall = 0;
+		}
+		if (ctrl == 64 || ctrl == 71) {
+			pc = -1;
+		}
 	}
-	if (tmp.opr_type >= 27 && tmp.opr_type <= 38) {
-		if (predictor.count(IF_ID.npc - 1) == 0) {
-			TLA_pre tmp;
-			predictor[IF_ID.npc - 1] = tmp;
-			b_history[IF_ID.npc - 1] = 0;
+	else if (r_stall) {
+		unique_lock<mutex> lock_r(IF_ID.mtx);
+
+		if (!IF_ID.fr) {
+			//puts("wait ID 7");
+			IF_ID.wrote.wait(lock_r);
+			//puts("wait end");
 		}
-		if (predictor[IF_ID.npc - 1].prediction[b_history[IF_ID.npc - 1]] > 1) {
-			ppc = pc = imm;
-		}
-		else ppc = pc = npc;
-		prd = rd;
+		IF_ID.fr = 1;
+		IF_ID.inst.opr_type = -1;
+		r_stall = 0;
+		pc = npc;
 	}
 
 	unique_lock<mutex> lock(ID_EX.mtx);
+
+		//puts("wait ID 8");
 	if (ID_EX.fr) ID_EX.fetched.wait(lock);
 	ID_EX.A = A; ID_EX.B = B; ID_EX.rd = rd;
 	ID_EX.imm = imm;
-	ID_EX.ctrl = tmp.opr_type;
+	ID_EX.ctrl = ctrl;
 	ID_EX.npc = npc;
 	ID_EX.fr = 1;
 	return 0;
 }
 
 void *EX(void *ptr) {
-	if (fin) {
-		if (fin == 2) fin++;
-		else return 0;
-	}
 	int A, B, imm, rd, npc, len;
 	int dest, tpc;
 	long long res;
@@ -277,12 +323,21 @@ void *EX(void *ptr) {
 	ID_EX.fetched.notify_all();
 	if (op == -1) {
 		unique_lock<mutex> lock(EX_MEM.mtx);
+		//puts("wait EX 1");
 		if (EX_MEM.fr) EX_MEM.fetched.wait(lock);
 		EX_MEM.ctrl = -1;
 		EX_MEM.fr = 1;
 		return 0;
 	}
-
+	if (op == -2) {
+		unique_lock<mutex> lock(EX_MEM.mtx);
+		//puts("wait EX 2");
+		if (EX_MEM.fr) EX_MEM.fetched.wait(lock);
+		EX_MEM.ctrl = -2;
+		EX_MEM.fr = 1;
+		return 0;
+	}
+	//printf("%d %d %d %d\n", A, B, imm, rd);
 	//printf("EX : %d\n", op);
 	// res:
 	switch (op) {
@@ -503,7 +558,7 @@ void *EX(void *ptr) {
 			res = A;
 			break;
 		case 64: case 71:
-			fin = 3;
+			op = -2;
 			break;
 	}
 
@@ -519,9 +574,19 @@ void *EX(void *ptr) {
 	if (op >= 27 && op <= 38) {
 		if (tpc != ppc) {
 			unique_lock<mutex> lock(IF_ID.mtx);
+
+			//puts("wait EX 3");
 			if (!IF_ID.fr) IF_ID.wrote.wait(lock);
 			IF_ID.inst.opr_type = -1;
+			IF_ID.fr = 1;
 			pc = tpc;
+			if (rd >= 0) tcpu->unlock_reg(rd);
+			if (op == 6 || op == 8 || op == 10 || op == 12) {
+				tcpu->unlock_reg(32); tcpu->unlock_reg(33);
+			}
+			if (op == 41 || op == 42) {
+				tcpu->unlock_reg(31);
+			}
 		}
 	}
 
@@ -533,16 +598,13 @@ void *EX(void *ptr) {
 }
 
 void *MEM(void *ptr) {
-	if (fin) {
-		if (fin == 3) fin++;
-		else return 0;
-	}
 	int ctrl, dest;
 	long long res;
 	int mdata;
 	EX_MEM.mtx.lock();
 	ctrl = EX_MEM.ctrl;
 	dest = EX_MEM.dest; res = EX_MEM.res;
+	//printf("%d %d %lld\n", ctrl, dest, res);
 	EX_MEM.fr = 0;
 	EX_MEM.mtx.unlock();
 	EX_MEM.fetched.notify_all();
@@ -550,6 +612,13 @@ void *MEM(void *ptr) {
 		unique_lock<mutex> lock(MEM_WB.mtx);
 		if (MEM_WB.fr) MEM_WB.fetched.wait(lock);
 		MEM_WB.ctrl = -1;
+		MEM_WB.fr = 1;
+		return 0;
+	}
+	if (ctrl == -2) {
+		unique_lock<mutex> lock(MEM_WB.mtx);
+		if (MEM_WB.fr) MEM_WB.fetched.wait(lock);
+		MEM_WB.ctrl = -2;
 		MEM_WB.fr = 1;
 		return 0;
 	}
@@ -614,10 +683,6 @@ void *MEM(void *ptr) {
 }
 
 void *WB(void *ptr) {
-	if (fin) {
-		if (fin == 4) fin++;
-		else return 0;
-	}
 	int ctrl, dest, mdata;
 	long long res;
 	MEM_WB.mtx.lock();
@@ -629,6 +694,7 @@ void *WB(void *ptr) {
 	MEM_WB.mtx.unlock();
 	MEM_WB.fetched.notify_all();
 	if (ctrl == -1) return 0;
+	if (ctrl == -2) fin = 1;
 	//printf("WB : %d\n", ctrl);
 	if (ctrl == 6 || ctrl == 8 || ctrl == 10 || ctrl == 12) {
 		tcpu->write_reg(32, res & ((1LL << 32) - 1));
@@ -640,19 +706,33 @@ void *WB(void *ptr) {
 	else if (ctrl >= 44 && ctrl <= 46) {
 		tcpu->write_reg(dest, mdata);
 	}
+
+	//printf("%d %d %d %lld\n", pc, ctrl, dest, res);
+	/*for(int i = 0; i < 34; i++) {
+		if (i % 6 == 0) printf("\n");
+		printf("$%d:%d\t", i, tcpu->get_reg(i));
+	}
+	printf("\n");*/
 	return 0;
 }
 
+int f_if, f_id, f_ex, f_mem, f_wb;
+
 void run() {
 	pthread_t _wb, _mem, _ex, _id, _if;
-	while (fin != 5) {
+	fin = 0;
+	f_if = f_id = f_ex = f_mem = f_wb = 0;
+	while (!fin) {
+		//if (pc == 288) {
+			//printf("%d\n", pc);
+		//}
 		pthread_create(&_wb, NULL, WB, NULL);
+		pthread_join(_wb, NULL);
+
 		pthread_create(&_mem, NULL, MEM, NULL);
 		pthread_create(&_ex, NULL, EX, NULL);
 		pthread_create(&_id, NULL, ID, NULL);
 		pthread_create(&_if, NULL, IF, NULL);
-
-		pthread_join(_wb, NULL);
 		pthread_join(_mem, NULL);
 		pthread_join(_ex, NULL);
 		pthread_join(_id, NULL);
