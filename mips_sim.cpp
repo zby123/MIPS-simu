@@ -717,27 +717,102 @@ void *WB(void *ptr) {
 }
 
 int f_if, f_id, f_ex, f_mem, f_wb;
+condition_variable c_if, c_id, c_ex, c_mem, c_wb;
+condition_variable r_if, r_id, r_ex, r_mem, r_wb;
+mutex m_if, m_id, m_ex, m_mem, m_wb, foo;
+
+void *__IF(void *ptr) {
+	while (!fin) {
+		unique_lock<mutex> lock(m_if);
+		//puts("start if");
+		while (f_if) {
+			puts("wait if");
+			c_if.wait(lock);
+		}
+		puts("start if");
+		IF(NULL);
+		f_if = 1;
+		r_if.notify_all();
+	}
+} 
+
+void *__ID(void *ptr) {
+	while (!fin) {
+		unique_lock<mutex> lock(m_id);
+		while (f_id) c_if.wait(lock);
+		//puts("start id");
+		ID(NULL);
+		f_id = 1;
+		r_id.notify_all();
+	}
+} 
+
+void *__EX(void *ptr) {
+	while (!fin) {
+		unique_lock<mutex> lock(m_ex);
+		while (f_ex) c_ex.wait(lock);
+		//puts("start ex");
+		EX(NULL);
+		f_ex = 1;
+		r_ex.notify_all();
+	}
+} 
+
+void *__MEM(void *ptr) {
+	while (!fin) {
+		unique_lock<mutex> lock(m_mem);
+		while (f_mem) c_mem.wait(lock);
+		//puts("start mem");
+		MEM(NULL);
+		f_mem = 1;
+		r_mem.notify_all();
+	}
+} 
+
+void *__WB(void *ptr) {
+	while (!fin) {
+		unique_lock<mutex> lock(m_wb);
+		while (f_wb) c_wb.wait(lock);
+		//puts("start wb");
+		WB(NULL);
+		f_wb = 1;
+		r_wb.notify_all();
+	}
+} 
 
 void run() {
 	pthread_t _wb, _mem, _ex, _id, _if;
 	fin = 0;
-	f_if = f_id = f_ex = f_mem = f_wb = 0;
+	f_if = f_id = f_ex = f_mem = f_wb = 1;
+	pthread_create(&_wb, NULL, __WB, NULL);
+	pthread_create(&_mem, NULL, __MEM, NULL);
+	pthread_create(&_ex, NULL, __EX, NULL);
+	pthread_create(&_id, NULL, __ID, NULL);
+	pthread_create(&_if, NULL, __IF, NULL);
 	while (!fin) {
 		//if (pc == 288) {
-			//printf("%d\n", pc);
+			printf("%d\n", pc);
 		//}
-		pthread_create(&_wb, NULL, WB, NULL);
-		pthread_join(_wb, NULL);
+		unique_lock<mutex> l_if(m_if), l_id(m_id), l_ex(m_ex), l_mem(m_mem), l_wb(m_wb), lf(foo);
+		f_if = f_id = f_ex = f_mem = f_wb = 0;
+		l_wb.unlock();
+		c_wb.notify_all();
+		r_wb.wait(lf);
 
-		pthread_create(&_mem, NULL, MEM, NULL);
-		pthread_create(&_ex, NULL, EX, NULL);
-		pthread_create(&_id, NULL, ID, NULL);
-		pthread_create(&_if, NULL, IF, NULL);
-		pthread_join(_mem, NULL);
-		pthread_join(_ex, NULL);
-		pthread_join(_id, NULL);
-		pthread_join(_if, NULL);
+		l_if.unlock(); l_id.unlock();
+		l_ex.unlock(); l_mem.unlock();
+		//puts("notify");
+		c_if.notify_all(); c_id.notify_all();
+		c_ex.notify_all(); c_mem.notify_all();
+
+		r_if.wait(lf); r_id.wait(lf);
+		r_ex.wait(lf); r_mem.wait(lf);
 	}
+	pthread_join(_wb, NULL);
+	pthread_join(_mem, NULL);
+	pthread_join(_ex, NULL);
+	pthread_join(_id, NULL);
+	pthread_join(_if, NULL);
 	//fprintf(stderr, "%d %d %.4lf\n", suc, fail, (double)1.0 * suc / (suc + fail));
 }
 
