@@ -3,7 +3,7 @@
 #include <unistd.h>
 #include <cstdlib>
 #include <string>
-#include <pthread.h>
+#include <thread>
 #include <mutex>
 #include <condition_variable>
 #include "mips.hpp"
@@ -70,12 +70,12 @@ void init(CPU &tcp, int tpc) {
 	ppc = 0;
 	fail = suc = 0;
 	predictor.clear();
-	IF_ID.fr = ID_EX.fr = EX_MEM.fr = MEM_WB.fr = 0;
+	IF_ID.fr = ID_EX.fr = EX_MEM.fr = MEM_WB.fr = 1;
 }
 
 void *IF(void *ptr) {
 	if (pc == -1) {
-		//puts("wait IF 1");
+		////puts("wait IF 1");
 		unique_lock<mutex> lock(IF_ID.mtx);
 		if (IF_ID.fr) IF_ID.fetched.wait(lock);
 		IF_ID.fr = 1;
@@ -86,15 +86,15 @@ void *IF(void *ptr) {
 	if (r_stall) {
 		unique_lock<mutex> lock(IF_ID.mtx);
 		if (IF_ID.fr) {
-			//puts("wait IF 2");
+			////puts("wait IF 2");
 			IF_ID.fetched.wait(lock);
-			//puts("wait end");
+			////puts("wait end");
 		}
 		IF_ID.fr = 1;
 		IF_ID.wrote.notify_all();
 		return NULL;
 	}
-	//puts("wait IF 3");
+	////puts("wait IF 3");
 	unique_lock<mutex> lock(IF_ID.mtx);
 	if (IF_ID.fr) IF_ID.fetched.wait(lock);
 	IF_ID.inst = tcpu->fetch_ins(pc);
@@ -198,6 +198,19 @@ void *ID(void *ptr) {
 			B = 0;
 	}
 
+	// imm:
+	if ((tmp.opr_type >= 26 && tmp.opr_type <= 39) || (tmp.opr_type == 41)) {
+		imm = tmp.arg[2];
+	}
+	if (tmp.opr_type >= 43 && tmp.opr_type <= 49) {
+		if (tmp.arg[1] < 0) imm = - tmp.arg[1] - 1;
+		else imm = tmp.offset;
+	}
+	if (tmp.opr_type == 40 || tmp.opr_type == 42) {
+		imm = tcpu->get_reg(tmp.arg[0]);
+	}
+	if (tmp.opr_type == 19) imm = tmp.arg[1];
+
 	if (tcpu->r_stall) {
 		unique_lock<mutex> lock2(IF_ID.mtx);
 		if (!IF_ID.fr) {
@@ -240,19 +253,6 @@ void *ID(void *ptr) {
 	if (tmp.opr_type == 41 || tmp.opr_type == 42) {
 		tcpu->lock_reg(31);
 	}
-
-	// imm:
-	if ((tmp.opr_type >= 26 && tmp.opr_type <= 39) || (tmp.opr_type == 41)) {
-		imm = tmp.arg[2];
-	}
-	if (tmp.opr_type >= 43 && tmp.opr_type <= 49) {
-		if (tmp.arg[1] < 0) imm = - tmp.arg[1] - 1;
-		else imm = tmp.offset;
-	}
-	if (tmp.opr_type == 40 || tmp.opr_type == 42) {
-		imm = tcpu->get_reg(tmp.arg[0]);
-	}
-	if (tmp.opr_type == 19) imm = tmp.arg[1];
 
 
 	if ((tmp.opr_type >= 26 && tmp.opr_type <= 42)|| ctrl == 64 || ctrl == 71) {
@@ -323,7 +323,7 @@ void *EX(void *ptr) {
 	ID_EX.fetched.notify_all();
 	if (op == -1) {
 		unique_lock<mutex> lock(EX_MEM.mtx);
-		//puts("wait EX 1");
+		////puts("wait EX 1");
 		if (EX_MEM.fr) EX_MEM.fetched.wait(lock);
 		EX_MEM.ctrl = -1;
 		EX_MEM.fr = 1;
@@ -331,7 +331,7 @@ void *EX(void *ptr) {
 	}
 	if (op == -2) {
 		unique_lock<mutex> lock(EX_MEM.mtx);
-		//puts("wait EX 2");
+		////puts("wait EX 2");
 		if (EX_MEM.fr) EX_MEM.fetched.wait(lock);
 		EX_MEM.ctrl = -2;
 		EX_MEM.fr = 1;
@@ -575,7 +575,7 @@ void *EX(void *ptr) {
 		if (tpc != ppc) {
 			unique_lock<mutex> lock(IF_ID.mtx);
 
-			//puts("wait EX 3");
+			////puts("wait EX 3");
 			if (!IF_ID.fr) IF_ID.wrote.wait(lock);
 			IF_ID.inst.opr_type = -1;
 			IF_ID.fr = 1;
@@ -716,103 +716,77 @@ void *WB(void *ptr) {
 	return 0;
 }
 
-int f_if, f_id, f_ex, f_mem, f_wb;
-condition_variable c_if, c_id, c_ex, c_mem, c_wb;
-condition_variable r_if, r_id, r_ex, r_mem, r_wb;
-mutex m_if, m_id, m_ex, m_mem, m_wb, foo;
+mutex l_if, l_id, l_ex, l_mem;
+int f_if, f_id, f_ex, f_mem;
+condition_variable c_if, c_id, c_ex, c_mem;
 
-void *__IF(void *ptr) {
+void _IF(){
+	unique_lock<mutex> lock(l_if);
 	while (!fin) {
-		unique_lock<mutex> lock(m_if);
-		//puts("start if");
-		while (f_if) {
-			puts("wait if");
-			c_if.wait(lock);
-		}
-		puts("start if");
+		if (!f_if) c_if.wait(lock);
+		//puts("run if");
 		IF(NULL);
-		f_if = 1;
-		r_if.notify_all();
+		//puts("fin if");
+		f_if = 0;
 	}
-} 
+}
 
-void *__ID(void *ptr) {
+void _ID(){
+	unique_lock<mutex> lock(l_id);
 	while (!fin) {
-		unique_lock<mutex> lock(m_id);
-		while (f_id) c_if.wait(lock);
-		//puts("start id");
+		if (!f_id) c_id.wait(lock);
+		//puts("run id");
 		ID(NULL);
-		f_id = 1;
-		r_id.notify_all();
+		//puts("fin id");
+		f_id = 0;
 	}
-} 
+}
 
-void *__EX(void *ptr) {
+void _EX(){
+	unique_lock<mutex> lock(l_ex);
 	while (!fin) {
-		unique_lock<mutex> lock(m_ex);
-		while (f_ex) c_ex.wait(lock);
-		//puts("start ex");
+		if (!f_ex) c_ex.wait(lock);
+		//puts("run ex");
 		EX(NULL);
-		f_ex = 1;
-		r_ex.notify_all();
+		//puts("fin ex");
+		f_ex = 0;
 	}
-} 
+}
 
-void *__MEM(void *ptr) {
+void _MEM(){
+	unique_lock<mutex> lock(l_mem);
 	while (!fin) {
-		unique_lock<mutex> lock(m_mem);
-		while (f_mem) c_mem.wait(lock);
-		//puts("start mem");
+		if (!f_mem) c_mem.wait(lock);
+		//puts("run mem");
 		MEM(NULL);
-		f_mem = 1;
-		r_mem.notify_all();
+		//puts("fin mem");
+		f_mem = 0;
 	}
-} 
-
-void *__WB(void *ptr) {
-	while (!fin) {
-		unique_lock<mutex> lock(m_wb);
-		while (f_wb) c_wb.wait(lock);
-		//puts("start wb");
-		WB(NULL);
-		f_wb = 1;
-		r_wb.notify_all();
-	}
-} 
+}
 
 void run() {
-	pthread_t _wb, _mem, _ex, _id, _if;
 	fin = 0;
-	f_if = f_id = f_ex = f_mem = f_wb = 1;
-	pthread_create(&_wb, NULL, __WB, NULL);
-	pthread_create(&_mem, NULL, __MEM, NULL);
-	pthread_create(&_ex, NULL, __EX, NULL);
-	pthread_create(&_id, NULL, __ID, NULL);
-	pthread_create(&_if, NULL, __IF, NULL);
+	f_if = f_id = f_ex = f_mem = 0;
+	thread _mem(_MEM), _ex(_EX), _id(_ID), _if(_IF);
 	while (!fin) {
-		//if (pc == 288) {
-			printf("%d\n", pc);
-		//}
-		unique_lock<mutex> l_if(m_if), l_id(m_id), l_ex(m_ex), l_mem(m_mem), l_wb(m_wb), lf(foo);
-		f_if = f_id = f_ex = f_mem = f_wb = 0;
-		l_wb.unlock();
-		c_wb.notify_all();
-		r_wb.wait(lf);
+		if (pc == 390) {
+			//printf("%d\n", pc);
+		}
+		WB(NULL);
+		l_if.lock(); l_id.lock();
+		l_ex.lock(); l_mem.lock();
+
+		f_if = f_id = f_ex = f_mem = 1;
 
 		l_if.unlock(); l_id.unlock();
 		l_ex.unlock(); l_mem.unlock();
-		//puts("notify");
+
 		c_if.notify_all(); c_id.notify_all();
 		c_ex.notify_all(); c_mem.notify_all();
-
-		r_if.wait(lf); r_id.wait(lf);
-		r_ex.wait(lf); r_mem.wait(lf);
+		while (f_if || f_id || f_ex || f_mem) {}
 	}
-	pthread_join(_wb, NULL);
-	pthread_join(_mem, NULL);
-	pthread_join(_ex, NULL);
-	pthread_join(_id, NULL);
-	pthread_join(_if, NULL);
+	_if.join(); _id.join();
+	_ex.join(); _mem.join();
 	//fprintf(stderr, "%d %d %.4lf\n", suc, fail, (double)1.0 * suc / (suc + fail));
 }
 
