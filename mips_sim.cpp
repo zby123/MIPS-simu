@@ -723,7 +723,9 @@ condition_variable c_if, c_id, c_ex, c_mem;
 void _IF(){
 	unique_lock<mutex> lock(l_if);
 	while (!fin) {
-		if (!f_if) c_if.wait(lock);
+		lock.unlock();
+		while (!f_if) this_thread::yield();
+		lock.lock();
 		//puts("run if");
 		IF(NULL);
 		//puts("fin if");
@@ -734,7 +736,9 @@ void _IF(){
 void _ID(){
 	unique_lock<mutex> lock(l_id);
 	while (!fin) {
-		if (!f_id) c_id.wait(lock);
+		lock.unlock();
+		while (!f_id) this_thread::yield();
+		lock.lock();
 		//puts("run id");
 		ID(NULL);
 		//puts("fin id");
@@ -745,7 +749,9 @@ void _ID(){
 void _EX(){
 	unique_lock<mutex> lock(l_ex);
 	while (!fin) {
-		if (!f_ex) c_ex.wait(lock);
+		lock.unlock();
+		while (!f_ex) this_thread::yield();
+		lock.lock();
 		//puts("run ex");
 		EX(NULL);
 		//puts("fin ex");
@@ -756,7 +762,9 @@ void _EX(){
 void _MEM(){
 	unique_lock<mutex> lock(l_mem);
 	while (!fin) {
-		if (!f_mem) c_mem.wait(lock);
+		lock.unlock();
+		while (!f_mem) this_thread::yield();
+		lock.lock();
 		//puts("run mem");
 		MEM(NULL);
 		//puts("fin mem");
@@ -781,8 +789,6 @@ void run() {
 		l_if.unlock(); l_id.unlock();
 		l_ex.unlock(); l_mem.unlock();
 
-		c_if.notify_all(); c_id.notify_all();
-		c_ex.notify_all(); c_mem.notify_all();
 		while (f_if || f_id || f_ex || f_mem) {}
 	}
 	_if.join(); _id.join();
